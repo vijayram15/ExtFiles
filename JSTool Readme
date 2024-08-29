@@ -1,0 +1,5 @@
+1. Extract zip file to notepad++ plugins folder.
+2. Create the folder with name as JSMinNPP.
+3. Copy the .dll file into JSMinNPP folder.
+4. Restart notepadd++.
+5. Enjoy :)
