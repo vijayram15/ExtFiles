@@ -82,3 +82,106 @@ const updateIndices = (list1, list2) => {
 // Example usage
 const updatedList2 = updateIndices(List1, List2);
 console.log(updatedList2);
+
+
+
+
+import React from 'react';
+import _ from 'lodash';
+
+const List1 = [
+  { id: 'p0', childs: ['c0', 'c2'], uci: 123 },
+  { id: 'c0', value: 'abcd' },
+  { id: 'c1', value: 'abd' },
+  { id: 'c2', value: 'acd' },
+  { id: 'c3', value: 'cd' },
+  { id: 'p1', childs: ['c1'], uci: 234 },
+  { id: 'c4', value: 'xcd' },
+  { id: 'p2', childs: ['c4'], uci: 456 }
+];
+
+const List2 = [
+  { id: 'p0', childs: ['c0'], uci: 123 },
+  { id: 'c0', value: 'xd' },
+  { id: 'c1', value: 'ad' },
+  { id: 'c2', value: 'cdg' },
+  { id: 'c3', value: 'cxd' },
+  { id: 'p1', childs: ['c4'], uci: 234 },
+  { id: 'c4', value: 'xdf' },
+  { id: 'p2', childs: ['c5'], uci: 567 },
+  { id: 'c5', value: 'xcyd' }
+];
+
+const updateIndices = (list1, list2) => {
+  // Find the maximum indices for children and parents from List1
+  const maxChildIndex = Math.max(
+    ...list1.filter(item => item.id.startsWith('c')).map(item => parseInt(item.id.replace('c', ''), 10))
+  );
+
+  const maxParentIndex = Math.max(
+    ...list1.filter(item => item.id.startsWith('p')).map(item => parseInt(item.id.replace('p', ''), 10))
+  );
+
+  let newChildIndex = maxChildIndex + 1;
+  let newParentIndex = maxParentIndex + 1;
+
+  // Update the indices for children and parents from the second list in a single loop
+  list2.forEach(item => {
+    if (item.id.startsWith('c')) {
+      const newId = `c${newChildIndex++}`;
+      item.id = newId;
+    } else if (item.id.startsWith('p')) {
+      if (!list1.some(parent => parent.uci === item.uci)) {
+        item.id = `p${newParentIndex++}`;
+      }
+    }
+  });
+
+  // Update the childs property in the second list parents in the same loop
+  list2.forEach(item => {
+    if (item.id.startsWith('p')) {
+      item.childs = item.childs.map(childId => {
+        const child = list2.find(childItem => childItem.id === childId);
+        return child ? child.id : childId;
+      });
+    }
+  });
+
+  return list2;
+};
+
+const mergeLists = (list1, list2) => {
+  // Update indices in List2
+  const updatedList2 = updateIndices(list1, list2);
+
+  // Combine the lists
+  const resultList = _.cloneDeep(list1);
+
+  updatedList2.forEach(item => {
+    if (item.id.startsWith('p')) {
+      const existingParent = resultList.find(parent => parent.uci === item.uci);
+      if (existingParent) {
+        existingParent.childs = _.union(existingParent.childs, item.childs);
+      } else {
+        resultList.push(item);
+      }
+    } else {
+      resultList.push(item);
+    }
+  });
+
+  return resultList;
+};
+
+// Example usage
+const resultList = mergeLists(List1, List2);
+console.log(resultList);
+
+const App = () => (
+  <div>
+    <h1>Merged List</h1>
+    <pre>{JSON.stringify(resultList, null, 2)}</pre>
+  </div>
+);
+
+export default App;
