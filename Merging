@@ -1,0 +1,84 @@
+const updateIndices = (list1, list2) => {
+  // Find the maximum indices for children and parents from List1
+  const maxChildIndex = Math.max(
+    ...list1.filter(item => item.id.startsWith('c')).map(item => parseInt(item.id.replace('c', ''), 10))
+  );
+
+  const maxParentIndex = Math.max(
+    ...list1.filter(item => item.id.startsWith('p')).map(item => parseInt(item.id.replace('p', ''), 10))
+  );
+
+  let newChildIndex = maxChildIndex + 1;
+  let newParentIndex = maxParentIndex + 1;
+
+  // Create a map to store updated child IDs
+  const childIdMap = {};
+
+  // Update the indices for children and parents from the second list
+  list2.forEach(item => {
+    if (item.id.startsWith('c')) {
+      const newId = `c${newChildIndex++}`;
+      childIdMap[item.id] = newId;
+      item.id = newId;
+    } else if (item.id.startsWith('p')) {
+      if (!list1.some(parent => parent.uci === item.uci)) {
+        item.id = `p${newParentIndex++}`;
+      }
+    }
+  });
+
+  // Update the childs property in the second list parents
+  list2.forEach(item => {
+    if (item.id.startsWith('p')) {
+      item.childs = item.childs.map(childId => childIdMap[childId] || childId);
+    }
+  });
+
+  return list2;
+};
+
+// Example usage
+const updatedList2 = updateIndices(List1, List2);
+console.log(updatedList2);
+
+const updateIndices = (list1, list2) => {
+  // Find the maximum indices for children and parents from List1
+  const maxChildIndex = Math.max(
+    ...list1.filter(item => item.id.startsWith('c')).map(item => parseInt(item.id.replace('c', ''), 10))
+  );
+
+  const maxParentIndex = Math.max(
+    ...list1.filter(item => item.id.startsWith('p')).map(item => parseInt(item.id.replace('p', ''), 10))
+  );
+
+  let newChildIndex = maxChildIndex + 1;
+  let newParentIndex = maxParentIndex + 1;
+
+  // Update the indices for children and parents from the second list in a single loop
+  list2.forEach(item => {
+    if (item.id.startsWith('c')) {
+      const newId = `c${newChildIndex++}`;
+      item.id = newId;
+    } else if (item.id.startsWith('p')) {
+      if (!list1.some(parent => parent.uci === item.uci)) {
+        item.id = `p${newParentIndex++}`;
+      }
+    }
+  });
+
+  // Update the childs property in the second list parents in the same loop
+  list2.forEach(item => {
+    if (item.id.startsWith('p')) {
+      item.childs = item.childs.map(childId => {
+        const child = list2.find(childItem => childItem.id === childId);
+        return child ? child.id : childId;
+      });
+    }
+  });
+
+  return list2;
+};
+
+// Example usage
+const updatedList2 = updateIndices(List1, List2);
+console.log(updatedList2);
