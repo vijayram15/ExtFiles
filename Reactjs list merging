@@ -1,0 +1,96 @@
+import React from 'react';
+import _ from 'lodash';
+
+const List1 = [
+  { id: 'p0', childs: ['c0', 'c2'], uci: 123 },
+  { id: 'c0', value: 'abcd' },
+  { id: 'c1', value: 'abd' },
+  { id: 'c2', value: 'acd' },
+  { id: 'c3', value: 'cd' },
+  { id: 'p1', childs: ['c1'], uci: 234 },
+  { id: 'c4', value: 'xcd' },
+  { id: 'p2', childs: ['c4'], uci: 456 }
+];
+
+const List2 = [
+  { id: 'p0', childs: ['c0'], uci: 123 },
+  { id: 'c0', value: 'xd' },
+  { id: 'c1', value: 'ad' },
+  { id: 'c2', value: 'cdg' },
+  { id: 'c3', value: 'cxd' },
+  { id: 'p1', childs: ['c4'], uci: 234 },
+  { id: 'c4', value: 'xdf' },
+  { id: 'p2', childs: ['c5'], uci: 567 },
+  { id: 'c5', value: 'xcyd' }
+];
+
+const App = () => {
+  // Step 1: Find the maximum indices for children and parents from List1
+  const maxChildIndex = Math.max(
+    ...List1.filter(item => item.id.startsWith('c')).map(item => parseInt(item.id.replace('c', ''), 10))
+  );
+
+  const maxParentIndex = Math.max(
+    ...List1.filter(item => item.id.startsWith('p')).map(item => parseInt(item.id.replace('p', ''), 10))
+  );
+
+  let newChildIndex = maxChildIndex + 1;
+  let newParentIndex = maxParentIndex + 1;
+
+  console.log("Step 1: Max Indices");
+  console.log("Max Child Index:", maxChildIndex);
+  console.log("Max Parent Index:", maxParentIndex);
+
+  // Step 2: Update the indices for children from the second list
+  const updatedChildren = List2.filter(item => item.id.startsWith('c')).map(child => {
+    const newId = `c${newChildIndex++}`;
+    return { ...child, id: newId };
+  });
+
+  console.log("Step 2: Updated Children");
+  console.log(updatedChildren);
+
+  // Step 3: Merge the lists based on the uci property for parents
+  const mergedParents = _.unionBy(List1.filter(item => item.id.startsWith('p')), List2.filter(item => item.id.startsWith('p')), 'uci');
+
+  console.log("Step 3: Merged Parents");
+  console.log(mergedParents);
+
+  // Step 4: Update the parents' child lists
+  mergedParents.forEach(parent => {
+    const similarParent = List2.find(item => item.uci === parent.uci);
+    if (similarParent) {
+      parent.childs = _.union(
+        parent.childs,
+        similarParent.childs.map(childId => {
+          const child = List2.find(item => item.id === childId);
+          return updatedChildren.find(updatedChild => updatedChild.value === child.value)?.id || childId;
+        })
+      );
+    }
+  });
+
+  console.log("Step 4: Updated Parents' Child Lists");
+  console.log(mergedParents);
+
+  // Step 5: Combine the lists into a final result list
+  const resultList = _.unionBy(
+    List1.filter(item => !item.id.startsWith('p')),
+    updatedChildren,
+    'value'
+  );
+
+  resultList.push(...mergedParents);
+
+  console.log("Step 5: Final Result List");
+  console.log(resultList);
+
+  return (
+    <div>
+      <h1>Merged List</h1>
+      <pre>{JSON.stringify(resultList, null, 2)}</pre>
+    </div>
+  );
+};
+
+export default App;
