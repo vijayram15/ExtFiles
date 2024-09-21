@@ -83,7 +83,7 @@ const updateIndices = (list1, list2) => {
 const updatedList2 = updateIndices(List1, List2);
 console.log(updatedList2);
 
-
+////new code
 
 
 import React from 'react';
@@ -185,3 +185,158 @@ const App = () => (
 );
 
 export default App;
+
+import React from 'react';
+import _ from 'lodash';
+
+const List1 = [
+  { taskId: 1, id: 'p0', childs: ['c0', 'c2'], parentId: null, parentName: null, uci: 123 },
+  { taskId: 2, id: 'c0', childs: null, parentId: 'p0', parentName: 'Parent 0', uci: 123 },
+  { taskId: 3, id: 'c1', childs: null, parentId: null, parentName: null, uci: 124 },
+  { taskId: 4, id: 'c2', childs: null, parentId: 'p0', parentName: 'Parent 0', uci: 123 },
+  { taskId: 5, id: 'c3', childs: null, parentId: null, parentName: null, uci: 125 },
+  { taskId: 6, id: 'p1', childs: ['c1'], parentId: null, parentName: null, uci: 234 },
+  { taskId: 7, id: 'c4', childs: null, parentId: 'p1', parentName: 'Parent 1', uci: 234 },
+  { taskId: 8, id: 'p2', childs: ['c4'], parentId: null, parentName: null, uci: 456 }
+];
+
+const List2 = [
+  { taskId: 1, id: 'p0', childs: ['c0'], parentId: null, parentName: null, uci: 123 },
+  { taskId: 2, id: 'c0', childs: null, parentId: 'p0', parentName: 'Parent 0', uci: 123 },
+  { taskId: 3, id: 'c1', childs: null, parentId: null, parentName: null, uci: 124 },
+  { taskId: 4, id: 'c2', childs: null, parentId: null, parentName: null, uci: 126 },
+  { taskId: 5, id: 'c3', childs: null, parentId: null, parentName: null, uci: 127 },
+  { taskId: 6, id: 'p1', childs: ['c4'], parentId: null, parentName: null, uci: 234 },
+  { taskId: 7, id: 'c4', childs: null, parentId: 'p1', parentName: 'Parent 1', uci: 234 },
+  { taskId: 8, id: 'p2', childs: ['c5'], parentId: null, parentName: null, uci: 567 },
+  { taskId: 9, id: 'c5', childs: null, parentId: 'p2', parentName: 'Parent 2', uci: 128 }
+];
+
+const updateSequentialIds = (list) => {
+  let childIndex = 0;
+  let parentIndex = 0;
+
+  list.forEach(item => {
+    if (item.id.startsWith('c')) {
+      item.id = `c${childIndex++}`;
+    } else if (item.id.startsWith('p')) {
+      item.id = `p${parentIndex++}`;
+    }
+  });
+
+  // Update the childs property with new sequential IDs
+  list.forEach(item => {
+    if (item.id.startsWith('p')) {
+      item.childs = item.childs.map(childId => {
+        const child = list.find(childItem => childItem.id === childId);
+        return child ? child.id : childId;
+      });
+    }
+  });
+
+  return list;
+};
+
+const updateIndices = (list1, list2) => {
+  // Ensure List1 has sequential IDs
+  const updatedList1 = updateSequentialIds(_.cloneDeep(list1));
+
+  // Find the maximum indices for children and parents from updated List1
+  const maxChildIndex = Math.max(
+    ...updatedList1.filter(item => item.id.startsWith('c')).map(item => parseInt(item.id.replace('c', ''), 10))
+  );
+
+  const maxParentIndex = Math.max(
+    ...updatedList1.filter(item => item.id.startsWith('p')).map(item => parseInt(item.id.replace('p', ''), 10))
+  );
+
+  let newChildIndex = maxChildIndex + 1;
+  let newParentIndex = maxParentIndex + 1;
+
+  // Update the indices for children and parents from the second list
+  list2.forEach(item => {
+    if (item.id.startsWith('c')) {
+      const newId = `c${newChildIndex++}`;
+      item.id = newId;
+    } else if (item.id.startsWith('p')) {
+      if (!updatedList1.some(parent => parent.uci === item.uci)) {
+        item.id = `p${newParentIndex++}`;
+      }
+    }
+  });
+
+  // Update the childs property in the second list parents
+  list2.forEach(item => {
+    if (item.id.startsWith('p')) {
+      item.childs = item.childs.map(childId => {
+        const child = list2.find(childItem => childItem.id === childId);
+        return child ? child.id : childId;
+      });
+    }
+  });
+
+  return { updatedList1, updatedList2: list2 };
+};
+
+const mergeLists = (list1, list2) => {
+  // Update indices in List2
+  const { updatedList1, updatedList2 } = updateIndices(list1, list2);
+
+  // Combine the lists
+  const combinedList = _.cloneDeep(updatedList1);
+
+  updatedList2.forEach(item => {
+    if (item.id.startsWith('p')) {
+      const existingParent = combinedList.find(parent => parent.uci === item.uci || parent.taskId === item.taskId);
+      if (existingParent) {
+        existingParent.childs = _.union(existingParent.childs, item.childs);
+      } else {
+        combinedList.push(item);
+      }
+    } else {
+      combinedList.push(item);
+    }
+  });
+
+  // Update parent-child relationships
+  combinedList.forEach(item => {
+    if (item.id.startsWith('c') && !item.parentId) {
+      const parent = combinedList.find(parent => parent.uci === item.uci || parent.parentName === item.parentName);
+      if (parent) {
+        item.parentId = parent.id;
+        parent.childs.push(item.id);
+      }
+    }
+  });
+
+  // Filter parents with childs property list size less than or equal to 1
+  const finalList = combinedList.filter(item => {
+    if (item.id.startsWith('p') && item.childs.length <= 1) {
+      item.childs.forEach(childId => {
+        const child = combinedList.find(childItem => childItem.id === childId);
+        if (child) {
+          child.parentId = null;
+        }
+      });
+      return false;
+    }
+    return true;
+  });
+
+  // Ensure sequential IDs in the final list
+  return updateSequentialIds(finalList);
+};
+
+// Example usage
+const resultList = mergeLists(List1, List2);
+console.log(resultList);
+
+const App = () => (
+  <div>
+    <h1>Merged List</h1>
+    <pre>{JSON.stringify(resultList, null, 2)}</pre>
+  </div>
+);
+
+export default App;
+
