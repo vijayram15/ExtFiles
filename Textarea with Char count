@@ -1,0 +1,74 @@
+import React, { useState, forwardRef } from 'react';
+
+const TextareaWithCharacterCount = forwardRef(({
+    maxLength = 4000,
+    style,
+    onChange,
+    rows = 10,
+    name,
+    className,
+    ...props
+}, ref) => {
+    const [text, setText] = useState('');
+    const [remainingChars, setRemainingChars] = useState(maxLength);
+
+    const handleChange = (event) => {
+        const inputText = event.target.value;
+        setText(inputText);
+        setRemainingChars(maxLength - inputText.length);
+        if (onChange) {
+            onChange(event);
+        }
+    };
+
+    return (
+        <div>
+            <textarea
+                ref={ref}
+                value={text}
+                onChange={handleChange}
+                maxLength={maxLength}
+                rows={rows}
+                name={name}
+                className={className}
+                style={style}
+                {...props}
+            />
+            <div>
+                Remaining characters: {remainingChars}
+            </div>
+        </div>
+    );
+});
+
+export default TextareaWithCharacterCount;
+
+
+//usage
+import React, { useRef } from 'react';
+import TextareaWithCharacterCount from './TextareaWithCharacterCount';
+
+const App = () => {
+    const textareaRef = useRef(null);
+
+    const handleTextareaChange = (event) => {
+        console.log('Textarea value:', event.target.value);
+    };
+
+    return (
+        <div>
+            <h1>Customizable Character Count Textarea</h1>
+            <TextareaWithCharacterCount
+                ref={textareaRef}
+                maxLength={2000}
+                rows={5}
+                name="customTextarea"
+                className="custom-textarea"
+                style={{ border: '1px solid #ccc', padding: '10px' }}
+                onChange={handleTextareaChange}
+            />
+        </div>
+    );
+};
+
+export default App;
