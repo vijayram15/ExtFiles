@@ -1,0 +1,95 @@
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+@Service
+public class ConfigService {
+    private final RestTemplate restTemplate;
+
+    public ConfigService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    public String getConfig() {
+        String url = "http://your-config-server-uri/config";
+        return restTemplate.getForObject(url, String.class);
+    }
+}
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ConfigParserService {
+
+    @Autowired
+    private ConfigService configService;
+
+    public JsonNode getPropertySourceByName(String name) throws Exception {
+        String jsonResponse = configService.getConfig();
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode rootNode = objectMapper.readTree(jsonResponse);
+        JsonNode propertySources = rootNode.path("propertySources");
+
+        for (JsonNode propertySource : propertySources) {
+            if (propertySource.path("name").asText().equals(name)) {
+                return propertySource.path("source");
+            }
+        }
+        return null;
+    }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.MapPropertySource;
+
+import javax.annotation.PostConstruct;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+@Configuration
+public class DynamicPropertyLoader {
+
+    @Autowired
+    private ConfigParserService configParserService;
+
+    @Autowired
+    private ConfigurableEnvironment environment;
+
+    @PostConstruct
+    public void loadProperties() throws Exception {
+        JsonNode source = configParserService.getPropertySourceByName("work-service-QA1");
+        if (source != null) {
+            Map<String, Object> properties = new HashMap<>();
+            Iterator<Map.Entry<String, JsonNode>> fields = source.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                properties.put(field.getKey(), field.getValue().asText());
+            }
+            MapPropertySource propertySource = new MapPropertySource("dynamicProperties", properties);
+            environment.getPropertySources().addFirst(propertySource);
+        }
+    }
+}
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Value("${spring.kafka.consumer.auto-startup}")
+    private boolean autoStartup;
+
+    @Bean
+    public void printAutoStartup() {
+        System.out.println("Auto-startup is set to: " + autoStartup);
+    }
+
+    // You can also define other beans or methods here
+}
