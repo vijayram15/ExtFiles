@@ -30,12 +30,24 @@ def get_latest_compatible_version(package, react_version):
             peer_deps = versions[version]["peerDependencies"]
             if "react" in peer_deps:
                 react_range = peer_deps["react"]
-                if semver.match(react_version, react_range):
+                if semver_match(react_version, react_range):
                     compatible_versions.append(version)
 
     if compatible_versions:
         return max(compatible_versions, key=semver.VersionInfo.parse)
     return None
+
+def semver_match(version, range_expr):
+    try:
+        return semver.match(version, range_expr)
+    except ValueError:
+        # Handle caret (^) and tilde (~) ranges
+        if range_expr.startswith('^'):
+            return semver.match(version, f">={range_expr[1:]},<{semver.bump_major(range_expr[1:])}")
+        elif range_expr.startswith('~'):
+            return semver.match(version, f">={range_expr[1:]},<{semver.bump_minor(range_expr[1:])}")
+        else:
+            raise
 
 def clean_unused_dependencies():
     result = subprocess.run(["depcheck"], capture_output=True, text=True)
