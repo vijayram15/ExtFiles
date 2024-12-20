@@ -5,6 +5,10 @@ import subprocess
 import requests
 import semver
 import pandas as pd
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Specify the React version you want to use
 REACT_VERSION = "16.8.6"
@@ -19,6 +23,7 @@ PROXY = {
 REGISTRY_URL = "https://your-jfrog-registry-url/artifactory/api/npm/npm-repo"
 
 def get_latest_compatible_version(package, react_version):
+    logging.info(f"Fetching latest compatible version for package {package} with React version {react_version}")
     url = f"{REGISTRY_URL}/{package}"
     response = requests.get(url, proxies=PROXY)
     data = response.json()
@@ -30,39 +35,27 @@ def get_latest_compatible_version(package, react_version):
             peer_deps = versions[version]["peerDependencies"]
             if "react" in peer_deps:
                 react_range = peer_deps["react"]
+                logging.info(f"Checking if React version {react_version} matches peer dependency range {react_range} for version {version}")
                 if semver_match(react_version, react_range):
                     compatible_versions.append(version)
 
     if compatible_versions:
-        return max(compatible_versions, key=semver.VersionInfo.parse)
+        latest_version = max(compatible_versions, key=semver.VersionInfo.parse)
+        logging.info(f"Latest compatible version for package {package} is {latest_version}")
+        return latest_version
+    logging.info(f"No compatible version found for package {package}")
     return None
 
-def semver_match(version, range_expr):
-    try:
-        # Split the range expression by comma
-        range_parts = range_expr.split(',')
-        for part in range_parts:
-            part = part.strip()
-            if part.startswith('^'):
-                if not semver.match(version, f">={part[1:]},<{semver.VersionInfo.parse(part[1:]).next_major()}"):
-                    return False
-            elif part.startswith('~'):
-                if not semver.match(version, f">={part[1:]},<{semver.VersionInfo.parse(part[1:]).next_minor()}"):
-                    return False
-            else:
-                if not semver.match(version, part):
-                    return False
-        return True
-    except ValueError:
-        raise
-
 def clean_unused_dependencies():
+    logging.info("Cleaning unused dependencies")
     result = subprocess.run(["depcheck"], capture_output=True, text=True)
     unused_deps = result.stdout.splitlines()
     for dep in unused_deps:
+        logging.info(f"Uninstalling unused dependency: {dep}")
         subprocess.run(["npm", "uninstall", dep])
 
 def update_dependencies(package_json_path, react_version):
+    logging.info(f"Updating dependencies in {package_json_path} for React version {react_version}")
     with open(package_json_path, "r") as file:
         package_json = json.load(file)
 
@@ -73,6 +66,7 @@ def update_dependencies(package_json_path, react_version):
 
     for package in list(dependencies.keys()) + list(dev_dependencies.keys()):
         current_version = dependencies.get(package) or dev_dependencies.get(package)
+        logging.info(f"Checking package {package} with current version {current_version}")
         latest_version = get_latest_compatible_version(package, react_version)
         peer_dep_version = None
 
@@ -101,9 +95,51 @@ def update_dependencies(package_json_path, react_version):
 
     df = pd.DataFrame(results)
     df.to_csv("dependency_report.csv", index=False)
+    logging.info("Dependency update complete. Report saved to dependency_report.csv")
     print(df)
 
 if __name__ == "__main__":
     package_json_path = "package.json"
     clean_unused_dependencies()
     update_dependencies(package_json_path, REACT_VERSION)
+
+--------------
+
+import semver
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def semver_match(version, range_expr):
+    try:
+        logging.info(f"Checking if version {version} matches range {range_expr}")
+        # Split the range expression by comma
+        range_parts = range_expr.split(',')
+        for part in range_parts:
+            part = part.strip()
+            logging.info(f"Processing range part: {part}")
+            if part.startswith('^'):
+                base_version = semver.VersionInfo.parse(part[1:])
+                next_major = f"{base_version.major + 1}.0.0"
+                logging.info(f"Interpreted ^ range: >= {part[1:]} and < {next_major}")
+                if not semver.match(version, f">={part[1:]},<{next_major}"):
+                    logging.info(f"Version {version} does not match range {part}")
+                    return False
+            elif part.startswith('~'):
+                base_version = semver.VersionInfo.parse(part[1:])
+                next_minor = f"{base_version.major}.{base_version.minor + 1}.0"
+                logging.info(f"Interpreted ~ range: >= {part[1:]} and < {next_minor}")
+                if not semver.match(version, f">={part[1:]},<{next_minor}"):
+                    logging.info(f"Version {version} does not match range {part}")
+                    return False
+            else:
+                logging.info(f"Checking version {version} against range part {part}")
+                if not semver.match(version, part):
+                    logging.info(f"Version {version} does not match range part {part}")
+                    return False
+        logging.info(f"Version {version} matches range {range_expr}")
+        return True
+    except ValueError as e:
+        logging.error(f"Error matching version {version} with range {range_expr}: {e}")
+        raise
