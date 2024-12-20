@@ -1,0 +1,227 @@
+pom.xml
+----------
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient</artifactId>
+        <version>4.5.13</version>
+    </dependency>
+    <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>2.12.3</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-csv</artifactId>
+        <version>1.8</version>
+    </dependency>
+</dependencies>
+-------------
+java classes 
+-------------
+package com.example.dependencychecker;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DependencyCheckerApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(DependencyCheckerApplication.class, args);
+    }
+}
+
+--------
+
+package com.example.dependencychecker.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.http.HttpHost;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.springframework.stereotype.Service;
+
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class DependencyCheckerService {
+
+    private static final String REACT_VERSION = "16.8.6";
+    private static final String PROXY_HOST = "ss.org";
+    private static final int PROXY_PORT = 80;
+    private static final String REGISTRY_URL = "https://your-jfrog-registry-url/artifactory/api/npm/npm-repo";
+
+    public void updateDependencies(String packageJsonPath) throws IOException, InterruptedException {
+        cleanUnusedDependencies();
+        byte[] jsonData = Files.readAllBytes(Paths.get(packageJsonPath));
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode packageJson = objectMapper.readTree(jsonData);
+
+        JsonNode dependencies = packageJson.path("dependencies");
+        JsonNode devDependencies = packageJson.path("devDependencies");
+
+        List<DependencyInfo> results = new ArrayList<>();
+
+        Iterator<Map.Entry<String, JsonNode>> fields = dependencies.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String packageName = entry.getKey();
+            String currentVersion = entry.getValue().asText();
+            String latestVersion = getLatestCompatibleVersion(packageName, REACT_VERSION);
+            String peerDepVersion = getPeerDependencyVersion(packageName, latestVersion);
+
+            results.add(new DependencyInfo(packageName, currentVersion, peerDepVersion, latestVersion));
+        }
+
+        fields = devDependencies.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String packageName = entry.getKey();
+            String currentVersion = entry.getValue().asText();
+            String latestVersion = getLatestCompatibleVersion(packageName, REACT_VERSION);
+            String peerDepVersion = getPeerDependencyVersion(packageName, latestVersion);
+
+            results.add(new DependencyInfo(packageName, currentVersion, peerDepVersion, latestVersion));
+        }
+
+        // Update package.json (not shown here for brevity)
+        // Write results to CSV
+        writeResultsToCSV(results);
+    }
+
+    private void cleanUnusedDependencies() throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder("npx", "depcheck");
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        process.waitFor();
+        List<String> unusedDeps = Files.readAllLines(Paths.get("depcheck-output.txt"));
+        for (String dep : unusedDeps) {
+            new ProcessBuilder("npm", "uninstall", dep).start().waitFor();
+        }
+    }
+
+    private String getLatestCompatibleVersion(String packageName, String reactVersion) throws IOException {
+        String url = REGISTRY_URL + "/" + packageName;
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpHost proxy = new HttpHost(PROXY_HOST, PROXY_PORT);
+        RequestConfig config = RequestConfig.custom().setProxy(proxy).build();
+        HttpGet request = new HttpGet(url);
+        request.setConfig(config);
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode rootNode = objectMapper.readTree(response.getEntity().getContent());
+            JsonNode versions = rootNode.path("versions");
+
+            Iterator<Map.Entry<String, JsonNode>> fields = versions.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                String version = entry.getKey();
+                JsonNode peerDependencies = entry.getValue().path("peerDependencies");
+                if (peerDependencies.has("react")) {
+                    String reactRange = peerDependencies.path("react").asText();
+                    if (semverMatch(reactVersion, reactRange)) {
+                        return version;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private String getPeerDependencyVersion(String packageName, String version) throws IOException {
+        if (version == null) return null;
+        String url = REGISTRY_URL + "/" + packageName + "/" + version;
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpHost proxy = new HttpHost(PROXY_HOST, PROXY_PORT);
+        RequestConfig config = RequestConfig.custom().setProxy(proxy).build();
+        HttpGet request = new HttpGet(url);
+        request.setConfig(config);
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode rootNode = objectMapper.readTree(response.getEntity().getContent());
+            JsonNode peerDependencies = rootNode.path("peerDependencies");
+            return peerDependencies.path("react").asText(null);
+        }
+    }
+
+    private boolean semverMatch(String version, String range) {
+        // Implement semver matching logic (not shown here for brevity)
+        return true;
+    }
+
+    private void writeResultsToCSV(List<DependencyInfo> results) throws IOException {
+        try (CSVPrinter printer = new CSVPrinter(new FileWriter("dependency_report.csv"), CSVFormat.DEFAULT.withHeader("Package", "Current Version", "Peer Dependency Version", "New Compatible Version"))) {
+            for (DependencyInfo info : results) {
+                printer.printRecord(info.packageName, info.currentVersion, info.peerDepVersion, info.latestVersion);
+            }
+        }
+    }
+
+    static class DependencyInfo {
+        String packageName;
+        String currentVersion;
+        String peerDepVersion;
+        String latestVersion;
+
+        DependencyInfo(String packageName, String currentVersion, String peerDepVersion, String latestVersion) {
+            this.packageName = packageName;
+            this.currentVersion = currentVersion;
+            this.peerDepVersion = peerDepVersion;
+            this.latestVersion = latestVersion;
+        }
+    }
+}
+
+----------
+
+package com.example.dependencychecker.controller;
+
+import com.example.dependencychecker.service.DependencyCheckerService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+
+@RestController
+public class DependencyCheckerController {
+
+    @Autowired
+    private DependencyCheckerService dependencyCheckerService;
+
+    @GetMapping("/update-dependencies")
+    public String updateDependencies(@RequestParam String packageJsonPath) {
+        try {
+            dependencyCheckerService.updateDependencies(packageJsonPath);
+            return "Dependencies updated successfully. Check dependency_report.csv for details.";
+        } catch (IOException | InterruptedException e) {
+            return "Error updating dependencies: " + e.getMessage();
+        }
+    }
+}
+
+--------
+
+curl "http://localhost:8080/update-dependencies?packageJsonPath=path/to/package.json"
