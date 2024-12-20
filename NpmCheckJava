@@ -16,6 +16,12 @@ pom.xml
         <artifactId>commons-csv</artifactId>
         <version>1.8</version>
     </dependency>
+<dependency>
+    <groupId>org.semver4j</groupId>
+    <artifactId>semver4j</artifactId>
+    <version>5.4.1</version>
+</dependency>
+
 </dependencies>
 
 java class
@@ -96,7 +102,9 @@ public class DependencyChecker {
             results.add(new DependencyInfo(packageName, currentVersion, peerDepVersion, latestVersion));
         }
 
-        // Update package.json (not shown here for brevity)
+        // Update package.json
+        PackageJsonUpdater.updatePackageJson(packageJsonPath, updatedDependencies, updatedDevDependencies);
+        
         // Write results to CSV
         writeResultsToCSV(results);
     }
@@ -148,8 +156,9 @@ public class DependencyChecker {
     }
 
     private static boolean semverMatch(String version, String range) {
-        // Implement semver matching logic (not shown here for brevity)
-        return true;
+        boolean isMatch = SemverUtils.semverMatch(version,range);
+        System.out.println("Version match: " + isMatch);
+        return isMatch;
     }
 
     private static void writeResultsToCSV(List<DependencyInfo> results) throws IOException {
@@ -171,6 +180,65 @@ public class DependencyChecker {
             this.currentVersion = currentVersion;
             this.peerDepVersion = peerDepVersion;
             this.latestVersion = latestVersion;
+        }
+    }
+}
+
+---------------
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Map;
+
+public class PackageJsonUpdater {
+
+    public static void updatePackageJson(String packageJsonPath, Map<String, String> updatedDependencies, Map<String, String> updatedDevDependencies) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode packageJson = objectMapper.readTree(new File(packageJsonPath));
+
+        // Update dependencies
+        JsonNode dependenciesNode = packageJson.path("dependencies");
+        if (dependenciesNode.isObject()) {
+            ObjectNode dependenciesObjectNode = (ObjectNode) dependenciesNode;
+            for (Map.Entry<String, String> entry : updatedDependencies.entrySet()) {
+                dependenciesObjectNode.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        // Update devDependencies
+        JsonNode devDependenciesNode = packageJson.path("devDependencies");
+        if (devDependenciesNode.isObject()) {
+            ObjectNode devDependenciesObjectNode = (ObjectNode) devDependenciesNode;
+            for (Map.Entry<String, String> entry : updatedDevDependencies.entrySet()) {
+                devDependenciesObjectNode.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        // Write the updated package.json back to the file
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(new File(packageJsonPath), packageJson);
+    }
+}
+
+-----------
+
+import com.github.zafarkhaja.semver.Version;
+import com.github.zafarkhaja.semver.expr.Expression;
+import com.github.zafarkhaja.semver.expr.Expressions;
+
+public class SemverUtils {
+
+    public static boolean semverMatch(String version, String range) {
+        try {
+            Version semverVersion = Version.valueOf(version);
+            Expression semverRange = Expressions.interpret(range);
+            return semverRange.contains(semverVersion);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
         }
     }
 }
