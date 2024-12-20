@@ -39,15 +39,22 @@ def get_latest_compatible_version(package, react_version):
 
 def semver_match(version, range_expr):
     try:
-        return semver.match(version, range_expr)
+        # Split the range expression by comma
+        range_parts = range_expr.split(',')
+        for part in range_parts:
+            part = part.strip()
+            if part.startswith('^'):
+                if not semver.match(version, f">={part[1:]},<{semver.VersionInfo.parse(part[1:]).next_major()}"):
+                    return False
+            elif part.startswith('~'):
+                if not semver.match(version, f">={part[1:]},<{semver.VersionInfo.parse(part[1:]).next_minor()}"):
+                    return False
+            else:
+                if not semver.match(version, part):
+                    return False
+        return True
     except ValueError:
-        # Handle caret (^) and tilde (~) ranges
-        if range_expr.startswith('^'):
-            return semver.match(version, f">={range_expr[1:]},<{semver.bump_major(range_expr[1:])}")
-        elif range_expr.startswith('~'):
-            return semver.match(version, f">={range_expr[1:]},<{semver.bump_minor(range_expr[1:])}")
-        else:
-            raise
+        raise
 
 def clean_unused_dependencies():
     result = subprocess.run(["depcheck"], capture_output=True, text=True)
