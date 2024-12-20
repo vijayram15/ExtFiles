@@ -1,0 +1,90 @@
+pip install requests semver pandas depcheck
+
+import json
+import subprocess
+import requests
+import semver
+import pandas as pd
+
+# Specify the React version you want to use
+REACT_VERSION = "16.8.6"
+
+# Specify your proxy settings
+PROXY = {
+    "http": "http://ss.org:80",
+    "https": "http://ss.org:80"
+}
+
+# Specify the registry URL
+REGISTRY_URL = "https://your-jfrog-registry-url/artifactory/api/npm/npm-repo"
+
+def get_latest_compatible_version(package, react_version):
+    url = f"{REGISTRY_URL}/{package}"
+    response = requests.get(url, proxies=PROXY)
+    data = response.json()
+    versions = data["versions"]
+    compatible_versions = []
+
+    for version in versions:
+        if "peerDependencies" in versions[version]:
+            peer_deps = versions[version]["peerDependencies"]
+            if "react" in peer_deps:
+                react_range = peer_deps["react"]
+                if semver.match(react_version, react_range):
+                    compatible_versions.append(version)
+
+    if compatible_versions:
+        return max(compatible_versions, key=semver.VersionInfo.parse)
+    return None
+
+def clean_unused_dependencies():
+    result = subprocess.run(["depcheck"], capture_output=True, text=True)
+    unused_deps = result.stdout.splitlines()
+    for dep in unused_deps:
+        subprocess.run(["npm", "uninstall", dep])
+
+def update_dependencies(package_json_path, react_version):
+    with open(package_json_path, "r") as file:
+        package_json = json.load(file)
+
+    dependencies = package_json.get("dependencies", {})
+    dev_dependencies = package_json.get("devDependencies", {})
+
+    results = []
+
+    for package in list(dependencies.keys()) + list(dev_dependencies.keys()):
+        current_version = dependencies.get(package) or dev_dependencies.get(package)
+        latest_version = get_latest_compatible_version(package, react_version)
+        peer_dep_version = None
+
+        if latest_version:
+            if package in dependencies:
+                dependencies[package] = latest_version
+            if package in dev_dependencies:
+                dev_dependencies[package] = latest_version
+
+            peer_dep_version = requests.get(f"{REGISTRY_URL}/{package}/{latest_version}", proxies=PROXY).json().get("peerDependencies", {}).get("react")
+
+        results.append({
+            "Package": package,
+            "Current Version": current_version,
+            "Peer Dependency Version": peer_dep_version,
+            "New Compatible Version": latest_version
+        })
+
+    package_json["dependencies"] = dependencies
+    package_json["devDependencies"] = dev_dependencies
+
+    with open(package_json_path, "w") as file:
+        json.dump(package_json, file, indent=2)
+
+    subprocess.run(["npm", "install"])
+
+    df = pd.DataFrame(results)
+    df.to_csv("dependency_report.csv", index=False)
+    print(df)
+
+if __name__ == "__main__":
+    package_json_path = "package.json"
+    clean_unused_dependencies()
+    update_dependencies(package_json_path, REACT_VERSION)
