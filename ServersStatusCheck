@@ -1,0 +1,51 @@
+# Define the list of servers with optional ports (leave Port empty if not applicable)
+$servers = @(
+    @{ Hostname = "example.com"; Port = 80 },
+    @{ Hostname = "anotherhost.com"; Port = 443 },
+    @{ Hostname = "192.168.1.1"; Port = "" }, # No port specified
+    @{ Hostname = "testserver.local"; Port = 22 }
+)
+
+# Create an empty array to store results
+$result = @()
+
+# Loop through each server to check status
+foreach ($server in $servers) {
+    if ($server.Port -ne "") {
+        # Check host and port if a port is specified
+        $status = Test-NetConnection -ComputerName $server.Hostname -Port $server.Port -InformationLevel Quiet
+        if ($status) {
+            $result += [PSCustomObject]@{
+                Hostname = $server.Hostname
+                Port     = $server.Port
+                Status   = "Up (Port Open)"
+            }
+        } else {
+            $result += [PSCustomObject]@{
+                Hostname = $server.Hostname
+                Port     = $server.Port
+                Status   = "Down (Port Closed/Unreachable)"
+            }
+        }
+    } else {
+        # Check only the hostname if no port is specified
+        $status = Test-Connection -ComputerName $server.Hostname -Count 2 -Quiet
+        if ($status) {
+            $result += [PSCustomObject]@{
+                Hostname = $server.Hostname
+                Port     = "N/A"
+                Status   = "Up"
+            }
+        } else {
+            $result += [PSCustomObject]@{
+                Hostname = $server.Hostname
+                Port     = "N/A"
+                Status   = "Down"
+            }
+        }
+    }
+}
+
+# Display the results in a formatted table
+Write-Host "Server Status Report:" -ForegroundColor Cyan
+$result | Format-Table -Property Hostname, Port, Status -AutoSize
