@@ -1,0 +1,24 @@
+@echo off
+REM Define servers to check
+set servers=example.com anotherhost.com 192.168.1.1 testserver.local
+
+REM Print a clean header for the table
+echo ============================================================
+echo|       Hostname            |           Status             |
+echo ============================================================
+
+REM Loop through each server to check status
+for %%i in (%servers%) do (
+    ping -n 1 %%i >nul
+    if errorlevel 1 (
+        REM If ping fails
+        echo|       %%i                |           Down               |
+    ) else (
+        REM If ping succeeds
+        echo|       %%i                |           Up                 |
+    )
+)
+
+REM Footer for visual clarity
+echo ============================================================
+pause
